@@ -9,8 +9,11 @@ export default function Home() {
   const [matchCount, setMatchCount] = useState(0);
 
   useEffect(() => {
-    setPlayerCount(getPlayers().length);
-    setMatchCount(getMatches().length);
+    const loadData = () => {
+      setPlayerCount(getPlayers().length);
+      setMatchCount(getMatches().length);
+    };
+    loadData();
   }, []);
 
   return (

@@ -17,7 +17,10 @@ export default function PlayersPage() {
   const [skillLevel, setSkillLevel] = useState(5);
 
   useEffect(() => {
-    loadPlayers();
+    // Initial data load on mount
+    const initialPlayers = getPlayers();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPlayers(initialPlayers);
   }, []);
 
   const loadPlayers = () => {

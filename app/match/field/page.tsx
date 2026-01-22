@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Player, Match, Team } from '@/lib/types';
+import { Player, Match } from '@/lib/types';
 import { getCurrentMatch, setCurrentMatch, getPlayers, saveMatch } from '@/lib/storage';
 import { movePlayer, calculateBalanceScore } from '@/lib/algorithm';
 
@@ -14,14 +14,17 @@ export default function FieldPage() {
   const [players, setPlayers] = useState<Player[]>([]);
 
   useEffect(() => {
-    const currentMatch = getCurrentMatch();
-    if (!currentMatch) {
-      router.push('/match/setup');
-      return;
-    }
+    const loadData = () => {
+      const currentMatch = getCurrentMatch();
+      if (!currentMatch) {
+        router.push('/match/setup');
+        return;
+      }
 
-    setMatch(currentMatch);
-    setPlayers(getPlayers());
+      setMatch(currentMatch);
+      setPlayers(getPlayers());
+    };
+    loadData();
   }, [router]);
 
   const handleDragEnd = (result: DropResult) => {

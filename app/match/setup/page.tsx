@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Player, Match, Team } from '@/lib/types';
+import { Player, Match } from '@/lib/types';
 import { getPlayers, generateId, setCurrentMatch } from '@/lib/storage';
 import { balanceTeams } from '@/lib/algorithm';
 
@@ -13,7 +13,10 @@ export default function MatchSetupPage() {
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
 
   useEffect(() => {
-    setPlayers(getPlayers());
+    const loadData = () => {
+      setPlayers(getPlayers());
+    };
+    loadData();
   }, []);
 
   const handleTogglePlayer = (playerId: string) => {

@@ -14,12 +14,15 @@ export default function EvaluationPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const currentMatch = getCurrentMatch();
-    if (!currentMatch) {
-      router.push('/match/setup');
-      return;
-    }
-    setMatch(currentMatch);
+    const loadData = () => {
+      const currentMatch = getCurrentMatch();
+      if (!currentMatch) {
+        router.push('/match/setup');
+        return;
+      }
+      setMatch(currentMatch);
+    };
+    loadData();
   }, [router]);
 
   const handleSubmit = (e: React.FormEvent) => {

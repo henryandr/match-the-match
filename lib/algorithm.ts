@@ -1,12 +1,6 @@
 // Team balancing algorithm
 import { Player, Team } from './types';
 
-interface BalanceResult {
-  teamA: Team;
-  teamB: Team;
-  scoreDifference: number;
-}
-
 /**
  * Main function to balance teams
  * Uses a greedy algorithm with position awareness
