@@ -17,7 +17,7 @@ Match the Match es una aplicación que permite:
 ### Tech Stack
 
 **Frontend:**
-- Next.js 14+ (React framework)
+- Next.js 16+ (React framework)
 - TypeScript (Type safety)
 - Tailwind CSS (Styling)
 - React DnD (Drag and drop)
