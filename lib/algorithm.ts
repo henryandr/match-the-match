@@ -62,11 +62,11 @@ export function balanceTeams(players: Player[]): [Team, Team] {
   forwards.sort((a, b) => b.skillLevel - a.skillLevel);
 
   // Distribute DEF and FWD first (high priority - must be balanced)
-  distributeByPosition(defenders, teamAPlayers, teamBPlayers, playersNeeded);
-  distributeByPosition(forwards, teamAPlayers, teamBPlayers, playersNeeded);
+  distributeByPosition(defenders, teamAPlayers, teamBPlayers, teamASize, teamBSize);
+  distributeByPosition(forwards, teamAPlayers, teamBPlayers, teamASize, teamBSize);
   
   // Distribute MID (low priority - flexible)
-  distributeByPosition(midfielders, teamAPlayers, teamBPlayers, playersNeeded);
+  distributeByPosition(midfielders, teamAPlayers, teamBPlayers, teamASize, teamBSize);
 
   // Step 4: Rebalance skills if there's significant difference
   rebalanceTeams(teamAPlayers, teamBPlayers, players);
@@ -99,24 +99,32 @@ function distributeByPosition(
   players: Player[],
   teamAPlayers: Player[],
   teamBPlayers: Player[],
-  playersNeeded: { teamA: number; teamB: number }
+  teamAMaxSize: number,
+  teamBMaxSize: number
 ): void {
-  let teamAIndex = 0;
-  let teamBIndex = 0;
-  
-  for (const player of players) {
-    // Alternate between teams, respecting team size limits
-    if (teamAIndex < playersNeeded.teamA && 
-        (teamBIndex >= playersNeeded.teamB || teamAIndex <= teamBIndex)) {
+  for (let i = 0; i < players.length; i++) {
+    const player = players[i];
+    
+    // Check how many spaces are left in each team
+    const teamASpaceLeft = teamAMaxSize - teamAPlayers.length;
+    const teamBSpaceLeft = teamBMaxSize - teamBPlayers.length;
+    
+    // If both teams have space, alternate (prioritizing balance)
+    if (teamASpaceLeft > 0 && teamBSpaceLeft > 0) {
+      // Alternate: even indices to team A, odd to team B
+      if (i % 2 === 0) {
+        teamAPlayers.push(player);
+      } else {
+        teamBPlayers.push(player);
+      }
+    } else if (teamASpaceLeft > 0) {
+      // Only team A has space
       teamAPlayers.push(player);
-      teamAIndex++;
-    } else if (teamBIndex < playersNeeded.teamB) {
+    } else if (teamBSpaceLeft > 0) {
+      // Only team B has space
       teamBPlayers.push(player);
-      teamBIndex++;
-    } else if (teamAIndex < playersNeeded.teamA) {
-      teamAPlayers.push(player);
-      teamAIndex++;
     }
+    // If neither has space, skip (shouldn't happen with correct logic)
   }
 }
 
