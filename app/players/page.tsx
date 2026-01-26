@@ -121,7 +121,7 @@ export default function PlayersPage() {
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">
+  <label className="block text-slate-800 font-semibold mb-2">
                   Nombre
                 </label>
                 <input
@@ -129,19 +129,32 @@ export default function PlayersPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="
+                    w-full px-4 py-2 rounded-lg 
+                    bg-white text-slate-900 
+                    placeholder:text-slate-500 
+                    border border-slate-300 
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    disabled:bg-slate-50 disabled:text-slate-700 disabled:placeholder:text-slate-500
+                  "
                   placeholder="Nombre del jugador"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">
+                <label className="block text-slate-800 font-semibold mb-2">
                   Posición
                 </label>
                 <select
                   value={positionId}
                   onChange={(e) => setPositionId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="
+                    w-full px-4 py-2 rounded-lg
+                    bg-white text-slate-900
+                    border border-slate-300
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    disabled:bg-slate-50 disabled:text-slate-700
+                    "
                 >
                   {POSITIONS.map(pos => (
                     <option key={pos.id} value={pos.id}>
@@ -152,7 +165,7 @@ export default function PlayersPage() {
               </div>
 
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">
+                <label className="block text-slate-800 font-semibold mb-2">
                   Nivel de Habilidad: {skillLevel}
                 </label>
                 <input
@@ -163,7 +176,7 @@ export default function PlayersPage() {
                   onChange={(e) => setSkillLevel(parseInt(e.target.value))}
                   className="w-full"
                 />
-                <div className="flex justify-between text-sm text-gray-500">
+                <div className="flex justify-between text-sm text-slate-500">
                   <span>1 (Principiante)</span>
                   <span>10 (Experto)</span>
                 </div>

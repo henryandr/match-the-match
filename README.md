@@ -98,35 +98,46 @@ interface MatchEvaluation {
 
 ## 🎲 Algoritmo de Balanceo
 
-El algoritmo utiliza un enfoque combinado:
+El algoritmo utiliza un enfoque en 3 pasos secuenciales para maximizar el equilibrio:
 
-### 1. Análisis Inicial
-- Calcula el skill total de todos los jugadores
-- Identifica posiciones críticas (especialmente arqueros)
+### 1. Distribución de Arqueros
+- **Con 2+ arqueros**: Asigna el mejor arquero a cada equipo (ordenados por skill)
+- **Con 1 arquero**: Lo asigna al Equipo A y suma **3 puntos de skill bonus** al equipo para equilibrar tácticamente
+- **Sin arqueros**: Los jugadores se distribuyen normalmente
 
-### 2. Distribución de Posiciones
-- Asegura que cada equipo tenga al menos un arquero
-- Distribuye jugadores por posición para balance táctico
+### 2. Distribución por Posición
+- Procesa secuencialmente cada zona táctica (DEF → MID → FWD)
+- **Reparte equitativamente**: Alterna los jugadores entre equipos
+- **Dentro de cada posición**: Primero distribuye los de mayor skill
+- **Resultado**: Ambos equipos tienen una distribución equilibrada en cada posición
 
-### 3. Balance de Skills
-- Utiliza algoritmo greedy con backtracking
-- Objetivo: minimizar la diferencia de skill total entre equipos
-- Penaliza configuraciones sin arquero
-
-### 4. Optimización
-- Evalúa múltiples combinaciones
-- Selecciona la distribución con menor diferencia de skills
-- Considera balance posicional
+### 3. Distribución por Skill (Segunda Iteración)
+- Toma los jugadores restantes no asignados
+- Los ordena por nivel de skill (descendente)
+- Los reparte de forma greedy: siempre al equipo con menor skill total
+- Minimiza la diferencia final de habilidades
 
 ```typescript
 function balanceTeams(players: Player[]): [Team, Team] {
-  // 1. Separar arqueros
+  // Step 1: Distribuir arqueros (con bonus si hay solo 1)
   const goalkeepers = players.filter(p => p.position.zone === 'GK');
-  const fieldPlayers = players.filter(p => p.position.zone !== 'GK');
+  let teamASkillBonus = goalkeepers.length === 1 ? 3 : 0;
   
-  // 2. Asignar un arquero a cada equipo
-  // 3. Distribuir jugadores de campo usando algoritmo greedy
-  // 4. Optimizar intercambiando jugadores para reducir diferencia
+  // Step 2: Distribuir por posición (alternando entre equipos)
+  const positionZones = ['DEF', 'MID', 'FWD'];
+  for (const zone of positionZones) {
+    const playersInZone = players.filter(p => p.position.zone === zone);
+    playersInZone.sort((a, b) => b.skillLevel - a.skillLevel);
+    // Alternar: i=0,2,4... a TeamA; i=1,3,5... a TeamB
+  }
+  
+  // Step 3: Distribuir restantes por skill greedy
+  for (const player of remainingPlayers) {
+    const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
+    const teamBSkill = calculateTotalSkill(teamBPlayers);
+    if (teamASkill <= teamBSkill) teamAPlayers.push(player);
+    else teamBPlayers.push(player);
+  }
   
   return [teamA, teamB];
 }
@@ -168,7 +179,13 @@ function balanceTeams(players: Player[]): [Team, Team] {
 
 ## 🚀 Instalación y Uso
 
+### Instalación Local
+
 ```bash
+# Clonar el repositorio
+git clone https://github.com/tu-usuario/match-the-match.git
+cd match-the-match
+
 # Instalar dependencias
 npm install
 
@@ -186,6 +203,53 @@ npm run lint
 ```
 
 Abrir [http://localhost:3000](http://localhost:3000) en el navegador.
+
+### Despliegue en Vercel
+
+**Opción 1: Con Git (Recomendado)**
+
+1. Sube tu repositorio a GitHub
+2. Ve a [Vercel.com](https://vercel.com) e inicia sesión
+3. Haz clic en "New Project"
+4. Importa tu repositorio de GitHub
+5. Vercel detectará automáticamente que es un proyecto Next.js
+6. Haz clic en "Deploy"
+
+**Opción 2: Con CLI de Vercel**
+
+```bash
+# Instalar Vercel CLI globalmente
+npm install -g vercel
+
+# Desplegar desde el directorio del proyecto
+vercel
+
+# Para producción
+vercel --prod
+```
+
+**Configuración automática:**
+- Framework: Next.js (detectado automáticamente)
+- Build Command: `npm run build`
+- Output Directory: `.next`
+- Install Command: `npm install`
+
+**Variables de entorno:** (si las necesitas)
+1. En el dashboard de Vercel, ve a Settings → Environment Variables
+2. Agrega las variables necesarias
+3. Redeploy automáticamente
+
+**Tu aplicación estará disponible en:**
+```
+https://tu-proyecto.vercel.app
+```
+
+Vercel ofrece:
+- ✅ SSL automático
+- ✅ CDN global
+- ✅ Deployments automáticos en cada push a main
+- ✅ Preview de pull requests
+- ✅ Analytics y monitoreo
 
 ## 📁 Estructura del Proyecto
 

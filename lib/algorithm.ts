@@ -1,9 +1,12 @@
 // Team balancing algorithm
-import { Player, Team } from './types';
+import { Player, Team, PositionZone } from './types';
 
 /**
  * Main function to balance teams
- * Uses a greedy algorithm with position awareness
+ * Distribution strategy:
+ * 1. Distribute goalkeepers (with skill bonus if only 1 GK)
+ * 2. Distribute players by position to balance each position zone
+ * 3. Distribute remaining players by skill level
  */
 export function balanceTeams(players: Player[]): [Team, Team] {
   if (players.length < 2) {
@@ -14,14 +17,12 @@ export function balanceTeams(players: Player[]): [Team, Team] {
   const goalkeepers = players.filter(p => p.position.zone === 'GK');
   const fieldPlayers = players.filter(p => p.position.zone !== 'GK');
 
-  // Sort players by skill level (descending)
-  const sortedFieldPlayers = [...fieldPlayers].sort((a, b) => b.skillLevel - a.skillLevel);
-
   // Initialize teams
   const teamAPlayers: Player[] = [];
   const teamBPlayers: Player[] = [];
+  let teamASkillBonus = 0; // Bonus skill for single goalkeeper scenario
 
-  // Assign goalkeepers first
+  // Step 1: Distribute goalkeepers
   if (goalkeepers.length >= 2) {
     // Sort goalkeepers by skill
     const sortedGKs = [...goalkeepers].sort((a, b) => b.skillLevel - a.skillLevel);
@@ -30,17 +31,50 @@ export function balanceTeams(players: Player[]): [Team, Team] {
     
     // Add remaining goalkeepers to field players
     for (let i = 2; i < sortedGKs.length; i++) {
-      sortedFieldPlayers.push(sortedGKs[i]);
+      fieldPlayers.push(sortedGKs[i]);
     }
   } else if (goalkeepers.length === 1) {
-    // Only one goalkeeper, assign to team A
+    // Only one goalkeeper, assign to team A and add skill bonus
     teamAPlayers.push(goalkeepers[0]);
+    teamASkillBonus = 3;
   }
 
-  // Distribute field players using greedy algorithm
-  // Always add to the team with lower total skill
-  for (const player of sortedFieldPlayers) {
-    const teamASkill = calculateTotalSkill(teamAPlayers);
+  // Step 2: Distribute players by position
+  const remainingPlayers = [...fieldPlayers];
+  const positionZones: PositionZone[] = ['DEF', 'MID', 'FWD'];
+
+  for (const zone of positionZones) {
+    const playersInZone = remainingPlayers.filter(p => p.position.zone === zone);
+    
+    // Sort by skill descending
+    playersInZone.sort((a, b) => b.skillLevel - a.skillLevel);
+
+    // Distribute players from this position zone
+    for (let i = 0; i < playersInZone.length; i++) {
+      const player = playersInZone[i];
+      
+      // Alternate between teams for balanced position distribution
+      if (i % 2 === 0) {
+        teamAPlayers.push(player);
+      } else {
+        teamBPlayers.push(player);
+      }
+      
+      // Remove from remaining players
+      const index = remainingPlayers.indexOf(player);
+      if (index > -1) {
+        remainingPlayers.splice(index, 1);
+      }
+    }
+  }
+
+  // Step 3: Distribute remaining players by skill level
+  // Sort remaining players by skill (descending)
+  remainingPlayers.sort((a, b) => b.skillLevel - a.skillLevel);
+
+  for (const player of remainingPlayers) {
+    // Calculate current skill including bonus
+    const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
     const teamBSkill = calculateTotalSkill(teamBPlayers);
 
     if (teamASkill <= teamBSkill) {
@@ -50,12 +84,13 @@ export function balanceTeams(players: Player[]): [Team, Team] {
     }
   }
 
-  // Create team objects
+  // Create team objects with skill bonus applied
+  const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
   const teamA: Team = {
     name: 'Equipo A',
     color: '#3B82F6', // Blue
     playerIds: teamAPlayers.map(p => p.id),
-    totalSkill: calculateTotalSkill(teamAPlayers)
+    totalSkill: teamASkill
   };
 
   const teamB: Team = {
