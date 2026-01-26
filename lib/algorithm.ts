@@ -4,9 +4,11 @@ import { Player, Team, PositionZone } from './types';
 /**
  * Main function to balance teams
  * Distribution strategy:
- * 1. Distribute goalkeepers (with skill bonus if only 1 GK)
- * 2. Distribute players by position to balance each position zone
- * 3. Distribute remaining players by skill level
+ * 1. Distribute goalkeepers (one to each team if possible)
+ * 2. Calculate equal team sizes (odd players = +1 to one team)
+ * 3. Distribute players by position (DEF and FWD priorities, MID flexible)
+ * 4. Rebalance skills if there's significant difference (swap low-skill players)
+ * 5. Handle extra player (if odd count) - lowest skill to team with highest score
  */
 export function balanceTeams(players: Player[]): [Team, Team] {
   if (players.length < 2) {
@@ -20,72 +22,59 @@ export function balanceTeams(players: Player[]): [Team, Team] {
   // Initialize teams
   const teamAPlayers: Player[] = [];
   const teamBPlayers: Player[] = [];
-  let teamASkillBonus = 0; // Bonus skill for single goalkeeper scenario
 
   // Step 1: Distribute goalkeepers
   if (goalkeepers.length >= 2) {
-    // Sort goalkeepers by skill
     const sortedGKs = [...goalkeepers].sort((a, b) => b.skillLevel - a.skillLevel);
     teamAPlayers.push(sortedGKs[0]);
     teamBPlayers.push(sortedGKs[1]);
     
-    // Add remaining goalkeepers to field players
+    // Add remaining goalkeepers to field players pool
     for (let i = 2; i < sortedGKs.length; i++) {
       fieldPlayers.push(sortedGKs[i]);
     }
   } else if (goalkeepers.length === 1) {
-    // Only one goalkeeper, assign to team A and add skill bonus
     teamAPlayers.push(goalkeepers[0]);
-    teamASkillBonus = 3;
   }
 
-  // Step 2: Distribute players by position
-  const remainingPlayers = [...fieldPlayers];
-  const positionZones: PositionZone[] = ['DEF', 'MID', 'FWD'];
+  // Step 2: Calculate target team sizes
+  const totalPlayers = players.length;
+  const isOddCount = totalPlayers % 2 === 1;
+  const baseTeamSize = Math.floor(totalPlayers / 2);
+  const teamASize = baseTeamSize + (isOddCount ? 1 : 0);
+  const teamBSize = baseTeamSize;
 
-  for (const zone of positionZones) {
-    const playersInZone = remainingPlayers.filter(p => p.position.zone === zone);
-    
-    // Sort by skill descending
-    playersInZone.sort((a, b) => b.skillLevel - a.skillLevel);
+  // Current distribution after goalkeepers
+  const currentFieldPlayersToDistribute = [...fieldPlayers];
+  const playersNeeded = {
+    teamA: teamASize - teamAPlayers.length,
+    teamB: teamBSize - teamBPlayers.length
+  };
 
-    // Distribute players from this position zone
-    for (let i = 0; i < playersInZone.length; i++) {
-      const player = playersInZone[i];
-      
-      // Alternate between teams for balanced position distribution
-      if (i % 2 === 0) {
-        teamAPlayers.push(player);
-      } else {
-        teamBPlayers.push(player);
-      }
-      
-      // Remove from remaining players
-      const index = remainingPlayers.indexOf(player);
-      if (index > -1) {
-        remainingPlayers.splice(index, 1);
-      }
-    }
-  }
+  // Step 3: Distribute by position (prioritize DEF and FWD)
+  const defenders = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'DEF');
+  const midfielders = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'MID');
+  const forwards = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'FWD');
 
-  // Step 3: Distribute remaining players by skill level
-  // Sort remaining players by skill (descending)
-  remainingPlayers.sort((a, b) => b.skillLevel - a.skillLevel);
+  // Sort each group by skill (descending)
+  defenders.sort((a, b) => b.skillLevel - a.skillLevel);
+  midfielders.sort((a, b) => b.skillLevel - a.skillLevel);
+  forwards.sort((a, b) => b.skillLevel - a.skillLevel);
 
-  for (const player of remainingPlayers) {
-    // Calculate current skill including bonus
-    const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
-    const teamBSkill = calculateTotalSkill(teamBPlayers);
+  // Distribute DEF and FWD first (high priority - must be balanced)
+  distributeByPosition(defenders, teamAPlayers, teamBPlayers, playersNeeded);
+  distributeByPosition(forwards, teamAPlayers, teamBPlayers, playersNeeded);
+  
+  // Distribute MID (low priority - flexible)
+  distributeByPosition(midfielders, teamAPlayers, teamBPlayers, playersNeeded);
 
-    if (teamASkill <= teamBSkill) {
-      teamAPlayers.push(player);
-    } else {
-      teamBPlayers.push(player);
-    }
-  }
+  // Step 4: Rebalance skills if there's significant difference
+  rebalanceTeams(teamAPlayers, teamBPlayers, players);
 
-  // Create team objects with skill bonus applied
-  const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
+  // Create team objects
+  const teamASkill = calculateTotalSkill(teamAPlayers);
+  const teamBSkill = calculateTotalSkill(teamBPlayers);
+
   const teamA: Team = {
     name: 'Equipo A',
     color: '#3B82F6', // Blue
@@ -97,10 +86,93 @@ export function balanceTeams(players: Player[]): [Team, Team] {
     name: 'Equipo B',
     color: '#EF4444', // Red
     playerIds: teamBPlayers.map(p => p.id),
-    totalSkill: calculateTotalSkill(teamBPlayers)
+    totalSkill: teamBSkill
   };
 
   return [teamA, teamB];
+}
+
+/**
+ * Distribute players from a position group between teams
+ */
+function distributeByPosition(
+  players: Player[],
+  teamAPlayers: Player[],
+  teamBPlayers: Player[],
+  playersNeeded: { teamA: number; teamB: number }
+): void {
+  let teamAIndex = 0;
+  let teamBIndex = 0;
+  
+  for (const player of players) {
+    // Alternate between teams, respecting team size limits
+    if (teamAIndex < playersNeeded.teamA && 
+        (teamBIndex >= playersNeeded.teamB || teamAIndex <= teamBIndex)) {
+      teamAPlayers.push(player);
+      teamAIndex++;
+    } else if (teamBIndex < playersNeeded.teamB) {
+      teamBPlayers.push(player);
+      teamBIndex++;
+    } else if (teamAIndex < playersNeeded.teamA) {
+      teamAPlayers.push(player);
+      teamAIndex++;
+    }
+  }
+}
+
+/**
+ * Rebalance teams by swapping low-skill players if skill difference is significant
+ */
+function rebalanceTeams(
+  teamAPlayers: Player[],
+  teamBPlayers: Player[],
+  allPlayers: Player[]
+): void {
+  const MAX_ITERATIONS = 3;
+  const SKILL_THRESHOLD = 5; // Minimum difference to trigger rebalance
+  
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    const teamASkill = calculateTotalSkill(teamAPlayers);
+    const teamBSkill = calculateTotalSkill(teamBPlayers);
+    const skillDifference = Math.abs(teamASkill - teamBSkill);
+
+    // If difference is small enough, stop rebalancing
+    if (skillDifference <= SKILL_THRESHOLD) {
+      break;
+    }
+
+    // Team with lower skill should receive help
+    const lowerTeam = teamASkill < teamBSkill ? teamAPlayers : teamBPlayers;
+    const higherTeam = teamASkill < teamBSkill ? teamBPlayers : teamAPlayers;
+
+    // Find lowest skill players in higher team (excluding goalkeepers if possible)
+    const swappableLow = higherTeam
+      .filter(p => p.position.zone !== 'GK')
+      .sort((a, b) => a.skillLevel - b.skillLevel);
+
+    // Find lowest skill players in lower team (excluding goalkeepers if possible)
+    const swappableHigh = lowerTeam
+      .filter(p => p.position.zone !== 'GK')
+      .sort((a, b) => b.skillLevel - a.skillLevel);
+
+    if (swappableLow.length > 0 && swappableHigh.length > 0) {
+      // Swap: move weakest from high team to low team, move strongest from low team to high team
+      const playerToMove = swappableLow[0];
+      const playerToReceive = swappableHigh[0];
+
+      const lowIndex = higherTeam.indexOf(playerToMove);
+      const highIndex = lowerTeam.indexOf(playerToReceive);
+
+      if (lowIndex > -1 && highIndex > -1) {
+        higherTeam[lowIndex] = playerToReceive;
+        lowerTeam[highIndex] = playerToMove;
+      } else {
+        break; // Stop if swap fails
+      }
+    } else {
+      break; // Stop if no swappable players
+    }
+  }
 }
 
 /**

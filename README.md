@@ -98,46 +98,50 @@ interface MatchEvaluation {
 
 ## 🎲 Algoritmo de Balanceo
 
-El algoritmo utiliza un enfoque en 3 pasos secuenciales para maximizar el equilibrio:
+El algoritmo utiliza un enfoque de 4 pasos para garantizar equipos equilibrados:
 
 ### 1. Distribución de Arqueros
 - **Con 2+ arqueros**: Asigna el mejor arquero a cada equipo (ordenados por skill)
-- **Con 1 arquero**: Lo asigna al Equipo A y suma **3 puntos de skill bonus** al equipo para equilibrar tácticamente
+- **Con 1 arquero**: Lo asigna al Equipo A
 - **Sin arqueros**: Los jugadores se distribuyen normalmente
 
-### 2. Distribución por Posición
-- Procesa secuencialmente cada zona táctica (DEF → MID → FWD)
-- **Reparte equitativamente**: Alterna los jugadores entre equipos
-- **Dentro de cada posición**: Primero distribuye los de mayor skill
-- **Resultado**: Ambos equipos tienen una distribución equilibrada en cada posición
+### 2. Cálculo de Tamaños Equitativos
+- **Número par**: Ambos equipos tienen exactamente el mismo número de jugadores
+- **Número impar**: Un equipo tiene 1 jugador más (el Equipo A)
+- El jugador extra (si es impar) será utilizado para nivelar skills
 
-### 3. Distribución por Skill (Segunda Iteración)
-- Toma los jugadores restantes no asignados
-- Los ordena por nivel de skill (descendente)
-- Los reparte de forma greedy: siempre al equipo con menor skill total
-- Minimiza la diferencia final de habilidades
+### 3. Distribución por Posiciones (Prioridades)
+- **Alta prioridad** (Defensas y Delanteros): Se distribuyen alternadamente para balance posicional
+  - Cuando hay múltiples jugadores de la misma posición (ej: 2 laterales izquierdos), se reparten uno a cada equipo
+- **Baja prioridad** (Volantes/Mediocampistas): Se distribuyen con mayor flexibilidad
+- Dentro de cada grupo de posición, se ordena por skill descendente
+
+### 4. Rebalanceo de Skills (Segunda Iteración)
+- Calcula la diferencia de skills entre equipos
+- Si la diferencia es mayor a 5 puntos, realiza **intercambios inteligentes**:
+  - Identifica al jugador más débil del equipo fuerte
+  - Identifica al jugador más fuerte del equipo débil
+  - Los intercambia para nivelar
+- Repite hasta 3 veces o hasta alcanzar balance
 
 ```typescript
 function balanceTeams(players: Player[]): [Team, Team] {
-  // Step 1: Distribuir arqueros (con bonus si hay solo 1)
+  // Step 1: Distribuir arqueros
   const goalkeepers = players.filter(p => p.position.zone === 'GK');
-  let teamASkillBonus = goalkeepers.length === 1 ? 3 : 0;
   
-  // Step 2: Distribuir por posición (alternando entre equipos)
-  const positionZones = ['DEF', 'MID', 'FWD'];
-  for (const zone of positionZones) {
-    const playersInZone = players.filter(p => p.position.zone === zone);
-    playersInZone.sort((a, b) => b.skillLevel - a.skillLevel);
-    // Alternar: i=0,2,4... a TeamA; i=1,3,5... a TeamB
-  }
+  // Step 2: Calcular tamaños de equipo
+  const totalPlayers = players.length;
+  const isOddCount = totalPlayers % 2 === 1;
+  const teamASize = Math.floor(totalPlayers / 2) + (isOddCount ? 1 : 0);
+  const teamBSize = Math.floor(totalPlayers / 2);
   
-  // Step 3: Distribuir restantes por skill greedy
-  for (const player of remainingPlayers) {
-    const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
-    const teamBSkill = calculateTotalSkill(teamBPlayers);
-    if (teamASkill <= teamBSkill) teamAPlayers.push(player);
-    else teamBPlayers.push(player);
-  }
+  // Step 3: Distribuir por posición (DEF → FWD → MID)
+  distributeByPosition(defenders, teamA, teamB, playersNeeded);
+  distributeByPosition(forwards, teamA, teamB, playersNeeded);
+  distributeByPosition(midfielders, teamA, teamB, playersNeeded);
+  
+  // Step 4: Rebalancear si hay diferencia > 5 puntos
+  rebalanceTeams(teamA, teamB, players);
   
   return [teamA, teamB];
 }

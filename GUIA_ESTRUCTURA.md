@@ -328,19 +328,19 @@ font-family: 'Poppins', sans-serif;
 
 El algoritmo está en **`lib/algorithm.ts`**. Es el corazón de la aplicación.
 
-### Algoritmo Actual: 3 Pasos (Arqueros → Posiciones → Skills)
+### Algoritmo Actual: 4 Pasos (Arqueros → Tamaños → Posiciones → Rebalanceo)
 
 **Ubicación:** `lib/algorithm.ts` función `balanceTeams()`
 
-**Cómo funciona actualmente:**
+**Características principales:**
 
 #### Paso 1: Distribución de Arqueros
-- **Con 2+ arqueros**: Asigna el mejor a cada equipo (por skill)
-- **Con 1 arquero**: Lo asigna al Equipo A y suma **3 puntos de skill bonus** para equilibrar
+- **Con 2+ arqueros**: Asigna el mejor a cada equipo (ordenados por skill)
+- **Con 1 arquero**: Lo asigna al Equipo A
 - **Sin arqueros**: Continúa con el paso 2
 
 ```typescript
-// Código del Paso 1 (líneas 35-46)
+// Código del Paso 1 (líneas 28-38)
 if (goalkeepers.length >= 2) {
   const sortedGKs = [...goalkeepers].sort((a, b) => b.skillLevel - a.skillLevel);
   teamAPlayers.push(sortedGKs[0]);
@@ -350,51 +350,145 @@ if (goalkeepers.length >= 2) {
   }
 } else if (goalkeepers.length === 1) {
   teamAPlayers.push(goalkeepers[0]);
-  teamASkillBonus = 3; // ← Bonus por arquero único
 }
 ```
 
-#### Paso 2: Distribución por Posición
-- Procesa cada zona táctica por separado (DEF → MID → FWD)
-- Reparte jugadores alternadamente entre equipos
-- Dentro de cada posición, ordena por skill descendente
+#### Paso 2: Cálculo de Tamaños Equitativos
+- **Número par de jugadores**: Ambos equipos tienen exactamente el mismo número
+- **Número impar**: El Equipo A tendrá 1 jugador más
+- Se calcula cuántos jugadores más necesita cada equipo
 
 ```typescript
-// Código del Paso 2 (líneas 48-68)
-const positionZones: PositionZone[] = ['DEF', 'MID', 'FWD'];
-for (const zone of positionZones) {
-  const playersInZone = remainingPlayers.filter(p => p.position.zone === zone);
-  playersInZone.sort((a, b) => b.skillLevel - a.skillLevel);
+// Código del Paso 2 (líneas 40-54)
+const totalPlayers = players.length;
+const isOddCount = totalPlayers % 2 === 1;
+const baseTeamSize = Math.floor(totalPlayers / 2);
+const teamASize = baseTeamSize + (isOddCount ? 1 : 0);  // +1 si es impar
+const teamBSize = baseTeamSize;
+
+// Calcular cuántos jugadores más necesita cada equipo
+const playersNeeded = {
+  teamA: teamASize - teamAPlayers.length,
+  teamB: teamBSize - teamBPlayers.length
+};
+```
+
+#### Paso 3: Distribución por Posición (Con Prioridades)
+- **Alta prioridad**: Defensas (DEF) y Delanteros (FWD)
+  - Se distribuyen alternadamente para máximo balance posicional
+  - Si hay 2 laterales izquierdos, uno va a cada equipo
+- **Baja prioridad**: Mediocampistas (MID) - distribuyen con flexibilidad
+- Dentro de cada grupo, ordena por skill (descendente)
+
+```typescript
+// Código del Paso 3 (líneas 56-69)
+// Separar por posición
+const defenders = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'DEF');
+const midfielders = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'MID');
+const forwards = currentFieldPlayersToDistribute.filter(p => p.position.zone === 'FWD');
+
+// Distribuir DEF y FWD primero (alta prioridad)
+distributeByPosition(defenders, teamAPlayers, teamBPlayers, playersNeeded);
+distributeByPosition(forwards, teamAPlayers, teamBPlayers, playersNeeded);
+
+// Distribuir MID (baja prioridad)
+distributeByPosition(midfielders, teamAPlayers, teamBPlayers, playersNeeded);
+```
+
+La función `distributeByPosition()` (líneas 82-99) alterna jugadores entre equipos:
+```typescript
+function distributeByPosition(
+  players: Player[],
+  teamAPlayers: Player[],
+  teamBPlayers: Player[],
+  playersNeeded: { teamA: number; teamB: number }
+): void {
+  let teamAIndex = 0;
+  let teamBIndex = 0;
   
-  for (let i = 0; i < playersInZone.length; i++) {
-    if (i % 2 === 0) {
-      teamAPlayers.push(playersInZone[i]);
-    } else {
-      teamBPlayers.push(playersInZone[i]);
+  for (const player of players) {
+    // Alterna: respeta los límites de jugadores necesarios
+    if (teamAIndex < playersNeeded.teamA && 
+        (teamBIndex >= playersNeeded.teamB || teamAIndex <= teamBIndex)) {
+      teamAPlayers.push(player);
+      teamAIndex++;
+    } else if (teamBIndex < playersNeeded.teamB) {
+      teamBPlayers.push(player);
+      teamBIndex++;
+    } else if (teamAIndex < playersNeeded.teamA) {
+      teamAPlayers.push(player);
+      teamAIndex++;
     }
   }
 }
 ```
 
-#### Paso 3: Distribución por Skill (Segunda Iteración)
-- Toma jugadores restantes no asignados
-- Los ordena por skill descendente
-- Los reparte greedy: al equipo con menor skill total
+#### Paso 4: Rebalanceo de Skills (Segunda Iteración)
+- Calcula la diferencia de skills entre equipos
+- Si la diferencia es **> 5 puntos**, realiza intercambios inteligentes
+- Intercambia el jugador más débil del equipo fuerte con el más fuerte del equipo débil
+- Repite hasta 3 veces o hasta alcanzar balance
 
 ```typescript
-// Código del Paso 3 (líneas 70-80)
-remainingPlayers.sort((a, b) => b.skillLevel - a.skillLevel);
-for (const player of remainingPlayers) {
-  const teamASkill = calculateTotalSkill(teamAPlayers) + teamASkillBonus;
-  const teamBSkill = calculateTotalSkill(teamBPlayers);
+// Código del Paso 4 (líneas 101-145)
+function rebalanceTeams(
+  teamAPlayers: Player[],
+  teamBPlayers: Player[],
+  allPlayers: Player[]
+): void {
+  const MAX_ITERATIONS = 3;
+  const SKILL_THRESHOLD = 5; // Diferencia mínima para intentar rebalanceo
   
-  if (teamASkill <= teamBSkill) {
-    teamAPlayers.push(player);
-  } else {
-    teamBPlayers.push(player);
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    const teamASkill = calculateTotalSkill(teamAPlayers);
+    const teamBSkill = calculateTotalSkill(teamBPlayers);
+    const skillDifference = Math.abs(teamASkill - teamBSkill);
+
+    if (skillDifference <= SKILL_THRESHOLD) {
+      break; // Diferencia aceptable, detener rebalanceo
+    }
+
+    // Identificar equipo débil y fuerte
+    const lowerTeam = teamASkill < teamBSkill ? teamAPlayers : teamBPlayers;
+    const higherTeam = teamASkill < teamBSkill ? teamBPlayers : teamAPlayers;
+
+    // Encontrar jugador más débil en equipo fuerte (no arquero)
+    const swappableLow = higherTeam
+      .filter(p => p.position.zone !== 'GK')
+      .sort((a, b) => a.skillLevel - b.skillLevel);
+
+    // Encontrar jugador más fuerte en equipo débil (no arquero)
+    const swappableHigh = lowerTeam
+      .filter(p => p.position.zone !== 'GK')
+      .sort((a, b) => b.skillLevel - a.skillLevel);
+
+    if (swappableLow.length > 0 && swappableHigh.length > 0) {
+      // Intercambiar
+      const playerToMove = swappableLow[0];
+      const playerToReceive = swappableHigh[0];
+      // ... realizar intercambio ...
+    }
   }
 }
 ```
+
+### 📊 Ejemplo de Distribución
+
+**Entrada:** 10 jugadores (número par)
+- 1 Arquero (skill 8)
+- 3 Defensas (skills 7, 6, 5)
+- 3 Volantes (skills 9, 6, 4)
+- 3 Delanteros (skills 8, 7, 5)
+
+**Proceso:**
+1. Arquero → Equipo A
+2. Equipos necesitan 4 y 5 jugadores más respectivamente
+3. Defensas: 7→A, 6→B, 5→A
+4. Delanteros: 8→B, 7→A, 5→B
+5. Volantes: 9→B, 6→A, 4→B
+6. Si diferencia > 5: intercambiar jugadores débiles
+
+**Resultado:** Equipos balanceados en posición y skills
 
 ### 📝 Modificación 1: Cambiar Criterio de Ordenamiento
 
